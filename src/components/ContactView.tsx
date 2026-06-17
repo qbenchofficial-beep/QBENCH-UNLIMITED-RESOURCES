@@ -35,6 +35,52 @@ export default function ContactView({ onNavigate }: ContactViewProps) {
   const [formState, setFormState] = useState<'idle' | 'submitting' | 'success'>('idle');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // SMTP diagnostics states
+  const [smtpChecking, setSmtpChecking] = useState(false);
+  const [smtpResult, setSmtpResult] = useState<{
+    tested: boolean;
+    success: boolean;
+    message: string;
+    error?: string;
+    code?: string;
+    advice?: string;
+    details?: {
+      host: string;
+      port: number;
+      user: string;
+      ssl: boolean;
+    };
+  } | null>(null);
+
+  const testSmtpConnection = async () => {
+    setSmtpChecking(true);
+    setSmtpResult(null);
+    try {
+      console.log('[Diagnostics] Triggering active server-side/Gmail-SMTP handshake test via /api/smtp-test...');
+      const response = await fetch('/api/smtp-test');
+      const data = await response.json();
+      setSmtpResult({
+        tested: true,
+        success: data.success,
+        message: data.message,
+        error: data.error,
+        code: data.code,
+        advice: data.advice,
+        details: data.details
+      });
+    } catch (err: any) {
+      console.error('SMTP test execution network or server error:', err);
+      setSmtpResult({
+        tested: true,
+        success: false,
+        message: 'Could not contact the server SMTP diagnostics API route. Please ensure the dev server is active and port 3000 is open.',
+        error: err?.message || 'Network Exception'
+      });
+    } finally {
+      setSmtpChecking(false);
+    }
+  };
+
   // Anti-spam honeypot protection field
   const [honeypot, setHoneypot] = useState('');
 
@@ -466,6 +512,73 @@ export default function ContactView({ onNavigate }: ContactViewProps) {
                     
                   </form>
                 )}
+
+                {/* SMTP Connection Diagnostics Console Panel */}
+                <div id="smtp-diag-card" className="mt-8 pt-6 border-t border-brand-outline/15 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="h-5 w-5 rounded-full bg-[#00685b]/10 text-[#00685b] flex items-center justify-center text-xs">🛠️</span>
+                      <span className="text-[11px] font-mono uppercase tracking-wider font-extrabold text-brand-text">Gmail SMTP Diagnostics</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={smtpChecking}
+                      onClick={testSmtpConnection}
+                      className="text-[10px] font-sans font-bold bg-[#faf9f9] border border-brand-outline/20 hover:border-[#00685b] text-[#00685b] px-3 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      {smtpChecking ? 'Handshaking...' : 'Run SMTP Test'}
+                    </button>
+                  </div>
+                  
+                  {smtpResult && (
+                    <div className={`p-4 rounded-xl border text-xs space-y-2 animate-fade-in ${
+                      smtpResult.success 
+                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' 
+                        : 'bg-rose-50/70 border-rose-200 text-rose-900'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-base leading-none ${smtpResult.success ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {smtpResult.success ? '✅' : '❌'}
+                        </span>
+                        <p className="font-bold font-sans">
+                          {smtpResult.success ? 'SMTP Connection Ok!' : 'SMTP Connection Failed'}
+                        </p>
+                      </div>
+                      
+                      <p className="font-sans text-[11px] leading-relaxed opacity-90">{smtpResult.message}</p>
+                      
+                      {smtpResult.details && (
+                        <div className="bg-white/60 p-2 rounded-lg font-mono text-[10px] text-slate-700 border border-slate-200/50 space-y-0.5">
+                          <div><span className="font-bold text-slate-500">Host:</span> {smtpResult.details.host}</div>
+                          <div><span className="font-bold text-slate-500">Port:</span> {smtpResult.details.port} ({smtpResult.details.ssl ? 'SSL' : 'TLS'})</div>
+                          <div><span className="font-bold text-slate-500">Sender:</span> {smtpResult.details.user}</div>
+                        </div>
+                      )}
+                      
+                      {smtpResult.error && (
+                        <div className="bg-red-950/5 text-red-900 p-2.5 rounded-lg font-mono text-[10px] leading-relaxed border border-red-900/10 whitespace-pre-wrap">
+                          <span className="font-bold text-red-800">Error Payload:</span> {smtpResult.error}
+                          {smtpResult.code && <div><span className="font-bold text-red-800">Code:</span> {smtpResult.code}</div>}
+                        </div>
+                      )}
+                      
+                      {smtpResult.advice && (
+                        <div className="bg-amber-50 text-amber-900 p-3 rounded-lg font-sans text-[11px] leading-relaxed border border-amber-200">
+                          <p className="font-bold text-amber-800 flex items-center gap-1.5 mb-1">
+                            <span>💡</span> Gmail Integration Advice:
+                          </p>
+                          <p>{smtpResult.advice}</p>
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-amber-800/90 text-[10px]">
+                            <li>Go to <strong>Google Account Settings &gt; Security</strong></li>
+                            <li>Enable <strong>2-Step Verification</strong></li>
+                            <li>Generate an <strong>App Password</strong></li>
+                            <li>Set this 16-character string as the <strong>SMTP_PASS</strong> value in your settings secrets page.</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 
               </div>
             </div>
